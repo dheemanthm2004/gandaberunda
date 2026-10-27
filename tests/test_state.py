@@ -315,3 +315,4 @@ def test_mark_missing_from_listing(tmp_path):
     store.mark_missing("hmtwatches.store", {"p-1"})
     assert store.get_product("hmtwatches.store", "p-1").missing_from_listing is False
     assert store.get_product("hmtwatches.store", "p-2").missing_from_listing is True
+

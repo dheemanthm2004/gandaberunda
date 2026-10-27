@@ -332,3 +332,4 @@ python -m pytest -v
 1. **Interval Polling**: GitHub Actions cron schedules run approximately every 10 minutes. During periods of heavy GitHub platform load, schedules may experience short delays.
 2. **Flash Restocks**: Popular HMT limited releases occasionally sell out within 2–5 minutes. The Sentinel notifies you immediately upon detecting stock on its check cycle, but cannot guarantee that inventory remains available until checkout is completed.
 3. **No Checkout Automation**: The Sentinel respects website integrity and acts strictly as an observational alert system. It does not automate cart checkout or bypass website controls.
+

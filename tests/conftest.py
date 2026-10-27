@@ -6,3 +6,4 @@ import pytest
 def no_sleep(monkeypatch):
     """Speed up retry and backoff tests by replacing time.sleep with a no-op."""
     monkeypatch.setattr("time.sleep", lambda seconds: None)
+

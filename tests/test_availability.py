@@ -163,3 +163,4 @@ def test_classify_from_html_no_conclusive_evidence():
     # Visible price and successful page loading does NOT imply in stock!
     assert res.state == AvailabilityState.UNKNOWN
     assert "no_conclusive_evidence" in res.reason
+

@@ -155,3 +155,4 @@ def test_telegram_send_test_notification(mocker):
 def test_telegram_missing_credentials():
     notifier = TelegramNotifier(bot_token="", chat_id="", dry_run=False)
     assert notifier.send_message("Hello") is False
+

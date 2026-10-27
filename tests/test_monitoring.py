@@ -225,3 +225,4 @@ def test_cli_telegram_test_command(mocker):
     args = argparse.Namespace(log_level=None)
     ret = cmd_telegram_test(args)
     assert ret == 0
+

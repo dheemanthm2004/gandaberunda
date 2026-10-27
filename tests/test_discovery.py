@@ -317,3 +317,4 @@ def test_discovery_service_coordinates_both(mocker):
     assert "hmtwatches.in" in reports
     assert store_mock.discover.called
     assert in_mock.discover.called
+

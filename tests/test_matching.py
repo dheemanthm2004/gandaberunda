@@ -66,3 +66,4 @@ def test_normalize_url():
     in_url = "https://www.hmtwatches.in/product_overview?id=abc123token"
     assert normalize_url(in_url) == in_url
     assert normalize_url("http://hmtwatches.in/product_overview?id=abc123token/") == in_url
+
