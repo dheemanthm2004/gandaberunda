@@ -102,7 +102,14 @@ def classify_from_html(soup: BeautifulSoup, context: str = "detail") -> Availabi
     - Enabled 'Add to Cart' or 'Buy Now' with no conflicting OOS indicators -> IN_STOCK.
     - Conflicting signals or no clear signals -> UNKNOWN.
     """
-    text_content = soup.get_text(separator=" ", strip=True)
+    # Create a working copy so we don't mutate caller's soup
+    working_soup = BeautifulSoup(str(soup), "lxml")
+
+    # Remove extraneous site chrome that might contain unrelated cart buttons (e.g. quick-view modals, headers, footers)
+    for extraneous in working_soup.select(".modal, .modal-dialog, header, footer, #quick_view, #product_view"):
+        extraneous.decompose()
+
+    text_content = working_soup.get_text(separator=" ", strip=True)
 
     has_coming_soon = bool(COMING_SOON_REGEX.search(text_content))
     has_oos = bool(OOS_REGEX.search(text_content))
@@ -110,7 +117,7 @@ def classify_from_html(soup: BeautifulSoup, context: str = "detail") -> Availabi
 
     # Check for specific known containers on HMT sites:
     # 1. <div class="outofstock"> ...
-    oos_div = soup.select_one(".outofstock")
+    oos_div = working_soup.select_one(".outofstock")
     if oos_div:
         div_text = oos_div.get_text(strip=True)
         if COMING_SOON_REGEX.search(div_text):
@@ -120,7 +127,7 @@ def classify_from_html(soup: BeautifulSoup, context: str = "detail") -> Availabi
         return AvailabilityResult(AvailabilityState.OUT_OF_STOCK, f"{context}:outofstock_div_present")
 
     # 2. Check all buttons for purchasability and disabled states
-    buttons = soup.find_all(["button", "a", "input"])
+    buttons = working_soup.find_all(["button", "a", "input"])
     cart_buttons_enabled = []
     cart_buttons_disabled = []
     explicit_oos_button = False
@@ -178,3 +185,4 @@ def classify_from_html(soup: BeautifulSoup, context: str = "detail") -> Availabi
 
     # No clear signal
     return AvailabilityResult(AvailabilityState.UNKNOWN, f"{context}:no_conclusive_evidence")
+

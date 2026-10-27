@@ -243,3 +243,4 @@ class StateStore:
             if prod.domain == domain:
                 if prod.product_id not in active_ids:
                     prod.missing_from_listing = True
+

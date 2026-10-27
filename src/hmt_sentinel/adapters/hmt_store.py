@@ -53,6 +53,13 @@ BASE_URL = "https://www.hmtwatches.store"
 SITEMAP_URL = f"{BASE_URL}/sitemap.xml"
 
 
+# SEO crawler header used by Amazon SmartBiz Next.js to server-render full collection listings
+_SEO_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; Google-InspectionTool/1.0;) AppleWebKit/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
+
+
 def _extract_next_data(html: str) -> Optional[dict]:
     """Extract and parse the __NEXT_DATA__ JSON script tag from HTML."""
     if not html:
@@ -122,20 +129,44 @@ class HMTStoreAdapter(BaseAdapter):
             except Exception as exc:
                 logger.warning("[hmtwatches.store] Failed to parse sitemap: %s", exc)
 
-        # Step 3: Visit each Gandaberunda collection page
+        # Step 3: Visit each Gandaberunda collection page (using SEO pre-render headers to bypass client-only PLP filtering)
         for col_url in collections_to_visit:
-            col_resp = fetch(col_url)
+            col_resp = fetch(col_url, headers=_SEO_HEADERS)
+            if not col_resp:
+                # Also try default headers as fallback
+                col_resp = fetch(col_url)
             if not col_resp:
                 continue
+
+            soup = BeautifulSoup(col_resp.text, "lxml")
             col_data = _extract_next_data(col_resp.text)
             if col_data:
                 page_props = col_data.get("props", {}).get("pageProps", {})
-                for p in page_props.get("initialProducts", []):
-                    item_details = p.get("itemDetails", {}) if isinstance(p.get("itemDetails"), dict) else p
-                    name = clean_product_name(item_details.get("name") or p.get("name") or "")
-                    sku = str(p.get("itemSku") or p.get("sku") or item_details.get("sku") or "")
-                    if is_gandaberunda(name) and sku:
-                        prod = self._product_from_item_details(sku, item_details, name)
+
+                # Check collectionProducts, initialProducts, products
+                raw_product_lists = [
+                    page_props.get("collectionProducts", []),
+                    page_props.get("initialProducts", []),
+                    page_props.get("products", []),
+                ]
+                for p_list in raw_product_lists:
+                    for p in p_list:
+                        item_details = p.get("itemDetails", {}) if isinstance(p.get("itemDetails"), dict) else p
+                        name = clean_product_name(item_details.get("name") or p.get("name") or "")
+                        sku = str(p.get("sku") or p.get("itemSku") or item_details.get("sku") or item_details.get("primaryProductId") or "")
+                        if is_gandaberunda(name) and sku:
+                            prod = self._product_from_item_details(sku, item_details, name)
+                            products_by_id[sku] = prod
+
+            # Fallback: parse direct HTML product links from rendered page
+            for a_tag in soup.find_all("a", href=True):
+                href = a_tag["href"]
+                m = re.search(r"/product/([a-f0-9\-]{32,36})", href, re.IGNORECASE)
+                if m:
+                    sku = m.group(1)
+                    link_text = clean_product_name(a_tag.get_text(strip=True))
+                    if is_gandaberunda(link_text) and sku not in products_by_id:
+                        prod = self._product_from_item_details(sku, {"name": link_text}, link_text)
                         products_by_id[sku] = prod
 
         # Step 4: If any products were found, check availability for any that are still UNKNOWN

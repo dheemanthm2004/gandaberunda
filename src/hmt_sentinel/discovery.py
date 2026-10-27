@@ -63,3 +63,4 @@ class DiscoveryService:
         if enable_in:
             results["hmtwatches.in"] = self.discover_in()
         return results
+

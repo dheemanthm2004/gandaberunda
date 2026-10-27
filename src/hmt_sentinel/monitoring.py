@@ -195,8 +195,8 @@ class MonitoringEngine:
 
             try:
                 # If product already has a verified state from discovery and was just discovered,
-                # we only re-check if unknown or to get fresh detail
-                if prod.availability == AvailabilityState.UNKNOWN or prod.price is None:
+                # we re-check if unknown, price missing, or if title is truncated (e.g. ends with '..')
+                if prod.availability == AvailabilityState.UNKNOWN or prod.price is None or prod.name.endswith(".."):
                     checked_prod = adapter.check_product(prod)
                 else:
                     checked_prod = prod
@@ -220,3 +220,4 @@ class MonitoringEngine:
             updated_prod, event = self.state_store.register_or_update(checked_prod)
             if event and event.should_notify:
                 pending_notifications.append(event)
+
