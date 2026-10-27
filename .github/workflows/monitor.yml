@@ -1,0 +1,71 @@
+name: Stock Sentinel Monitor
+
+on:
+  schedule:
+    # Runs every 10 minutes (subject to GitHub Actions scheduling queue)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (do not send real Telegram alerts)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: stock-sentinel-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    name: Run Gandaberunda Stock Sentinel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Execute monitoring cycle
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NOTIFY_ON_FAILURE: ${{ vars.NOTIFY_ON_FAILURE || '0' }}
+          REQUEST_TIMEOUT: "25"
+          MAX_RETRIES: "3"
+          LOG_LEVEL: "INFO"
+          ENABLE_STORE: "1"
+          ENABLE_IN: "1"
+          DRY_RUN: ${{ (github.event.inputs.dry_run == 'true' || github.event.inputs.dry_run == true) && '1' || '0' }}
+        run: |
+          python -m hmt_sentinel.cli monitor
+
+      - name: Commit and persist state changes
+        run: |
+          if [ -n "$(git status --porcelain state.json)" ]; then
+            echo "State changes detected. Committing and pushing to repository..."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git pull --rebase origin main || true
+            git add state.json
+            git commit -m "chore(state): update stock sentinel state [skip ci]"
+            git push origin main
+          else
+            echo "No state changes to commit."
+          fi
