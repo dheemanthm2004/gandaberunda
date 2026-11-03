@@ -2,8 +2,8 @@ name: Stock Sentinel Monitor
 
 on:
   schedule:
-    # Runs every 10 minutes (subject to GitHub Actions scheduling queue)
-    - cron: '*/10 * * * *'
+    # Runs every 5 minutes (subject to GitHub Actions scheduling queue)
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   monitor:
-    name: Run Gandaberunda Stock Sentinel
+    name: Run Gandaberunda & Kannadiga Stock Sentinel
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -62,11 +62,10 @@ jobs:
             echo "State changes detected. Committing and pushing to repository..."
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git pull --rebase origin main || true
+            git pull origin main --no-edit -X ours || true
             git add state.json
-            git commit -m "chore(state): update stock sentinel state [skip ci]"
+            git commit -m "chore(state): update stock sentinel state [skip ci]" || true
             git push origin main
           else
             echo "No state changes to commit."
           fi
-

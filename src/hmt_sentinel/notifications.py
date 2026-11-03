@@ -28,8 +28,9 @@ def format_restock_message(product: Product, detected_at: Optional[datetime] = N
     dt = detected_at or product.last_transition or utcnow()
     kolkata_time = dt.astimezone(KOLKATA_TZ).strftime("%d %b %Y, %I:%M:%S %p IST")
 
+    watch_type = "KANNADIGA" if "kannad" in product.name.lower() else "GANDABERUNDA"
     lines = [
-        "🎉 HMT GANDABERUNDA RESTOCK DETECTED",
+        f"🎉 HMT {watch_type} RESTOCK DETECTED",
         "",
         f"Product: {product.name}",
     ]

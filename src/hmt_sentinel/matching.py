@@ -1,6 +1,7 @@
-"""Product name matching and extraction for Gandaberunda variants."""
+"""Product name matching and extraction for Gandaberunda and Kannadiga variants."""
 from __future__ import annotations
 
+import html
 import re
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
@@ -21,7 +22,17 @@ _PREFIX_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Common model reference pattern for HMT watches (e.g. JLGG 01, JLGL 01, JLSS 01, JGSS 02, etc.)
+# Regex matching Kannadiga / Kannada in various forms:
+# Full forms:
+#   "HMT Kannadiga Gents JGGG 01", "HMT Kannadiga Ladies JLGL 01", "Kannadiga", "Kannada"
+# Truncated listing forms (from hmtwatches.in compact cards):
+#   "HMT Kannadiga Ladi..", "HMT Kannadiga Gent..", "HMT Kannadig..", "HMT Kannad.."
+_KANNADIGA_PATTERN = re.compile(
+    r"\bkannad(?:iga|a|ig\.\.|i\.\.|\.\.)?\b|\bkannad(?:iga|a)?",
+    re.IGNORECASE,
+)
+
+# Common model reference pattern for HMT watches (e.g. JLGG 01, JLGL 01, JLSS 01, JGSS 02, JGGG 01, etc.)
 _MODEL_REF_PATTERN = re.compile(
     r"\b([A-Z]{3,4}\s*[-–—]?\s*\d{2})\b",
     re.IGNORECASE,
@@ -36,11 +47,23 @@ def is_gandaberunda(text: str) -> bool:
     return bool(_GANDABERUNDA_PATTERN.search(cleaned) or _PREFIX_PATTERN.search(cleaned))
 
 
+def is_kannadiga(text: str) -> bool:
+    """Return True if text contains any Kannadiga/Kannada name variation or truncated form."""
+    if not text:
+        return False
+    cleaned = text.strip()
+    return bool(_KANNADIGA_PATTERN.search(cleaned))
+
+
+def is_target_watch(text: str) -> bool:
+    """Return True if text matches any targeted watch variant (Gandaberunda or Kannadiga)."""
+    return is_gandaberunda(text) or is_kannadiga(text)
+
+
 def clean_product_name(text: str) -> str:
     """Clean whitespace and HTML entities from a product name."""
     if not text:
         return ""
-    import html
     cleaned = html.unescape(text)
     # Collapse multiple whitespace
     cleaned = re.sub(r"\s+", " ", cleaned).strip()

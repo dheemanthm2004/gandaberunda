@@ -43,6 +43,7 @@ from hmt_sentinel.matching import (
     clean_product_name,
     extract_model_ref,
     is_gandaberunda,
+    is_target_watch,
     normalize_url,
 )
 from hmt_sentinel.models import AvailabilityState, Product, utcnow
@@ -94,11 +95,11 @@ class HMTStoreAdapter(BaseAdapter):
             if home_data:
                 page_props = home_data.get("props", {}).get("pageProps", {})
 
-                # Find Gandaberunda collections in allCollections
+                # Find Gandaberunda and Kannadiga collections in allCollections
                 for col in page_props.get("allCollections", []):
                     col_name = col.get("name", "")
                     col_id = col.get("id") or col.get("collectionId")
-                    if is_gandaberunda(col_name) and col_id:
+                    if is_target_watch(col_name) and col_id:
                         col_url = f"{BASE_URL}/collection/{col_id}/{col_name.strip()}"
                         collections_to_visit.append(col_url)
                         logger.info("[hmtwatches.store] Found collection from home: %s (%s)", col_name, col_url)
@@ -108,13 +109,13 @@ class HMTStoreAdapter(BaseAdapter):
                 for p in home_prods:
                     item_details = p.get("itemDetails", {})
                     name = clean_product_name(item_details.get("name") or p.get("name") or "")
-                    if is_gandaberunda(name):
+                    if is_target_watch(name):
                         sku = str(p.get("itemSku") or item_details.get("sku") or item_details.get("primaryProductId") or "")
                         if sku:
                             prod = self._product_from_item_details(sku, item_details, name)
                             products_by_id[sku] = prod
 
-        # Step 2: Check Sitemap for Gandaberunda collections & products
+        # Step 2: Check Sitemap for target collections & products
         sitemap_resp = fetch(SITEMAP_URL)
         if sitemap_resp:
             try:
@@ -122,14 +123,14 @@ class HMTStoreAdapter(BaseAdapter):
                 ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
                 for loc_tag in root.findall(".//ns:loc", ns):
                     loc = loc_tag.text or ""
-                    if "/collection/" in loc and is_gandaberunda(loc):
+                    if "/collection/" in loc and is_target_watch(loc):
                         if loc not in collections_to_visit:
                             collections_to_visit.append(loc)
                             logger.info("[hmtwatches.store] Found collection from sitemap: %s", loc)
             except Exception as exc:
                 logger.warning("[hmtwatches.store] Failed to parse sitemap: %s", exc)
 
-        # Step 3: Visit each Gandaberunda collection page (using SEO pre-render headers to bypass client-only PLP filtering)
+        # Step 3: Visit each target collection page (using SEO pre-render headers to bypass client-only PLP filtering)
         for col_url in collections_to_visit:
             col_resp = fetch(col_url, headers=_SEO_HEADERS)
             if not col_resp:
@@ -154,7 +155,7 @@ class HMTStoreAdapter(BaseAdapter):
                         item_details = p.get("itemDetails", {}) if isinstance(p.get("itemDetails"), dict) else p
                         name = clean_product_name(item_details.get("name") or p.get("name") or "")
                         sku = str(p.get("sku") or p.get("itemSku") or item_details.get("sku") or item_details.get("primaryProductId") or "")
-                        if is_gandaberunda(name) and sku:
+                        if is_target_watch(name) and sku:
                             prod = self._product_from_item_details(sku, item_details, name)
                             products_by_id[sku] = prod
 
@@ -165,7 +166,7 @@ class HMTStoreAdapter(BaseAdapter):
                 if m:
                     sku = m.group(1)
                     link_text = clean_product_name(a_tag.get_text(strip=True))
-                    if is_gandaberunda(link_text) and sku not in products_by_id:
+                    if is_target_watch(link_text) and sku not in products_by_id:
                         prod = self._product_from_item_details(sku, {"name": link_text}, link_text)
                         products_by_id[sku] = prod
 

@@ -4,6 +4,8 @@ from hmt_sentinel.matching import (
     clean_product_name,
     extract_model_ref,
     is_gandaberunda,
+    is_kannadiga,
+    is_target_watch,
     normalize_url,
 )
 
@@ -44,6 +46,48 @@ def test_is_gandaberunda(text, expected):
     assert is_gandaberunda(text) is expected
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("HMT Kannadiga Gents JGGG 01", True),
+        ("HMT Kannadiga Gents JGGL 01", True),
+        ("HMT Kannadiga Gents JGSL 01", True),
+        ("HMT Kannadiga Gents JGSS 01", True),
+        ("HMT Kannadiga Ladies JLGG 01", True),
+        ("HMT Kannadiga Ladies JLGL 01", True),
+        ("HMT Kannadiga Ladies JLSS 01", True),
+        ("HMT Kannadiga Ladies JLSL 01", True),
+        ("HMT Kannadiga Ladi..", True),
+        ("HMT Kannadiga Gent..", True),
+        ("kannadiga", True),
+        ("KANNADIGA", True),
+        ("HMT Kannada Special", True),
+        # Other watches
+        ("HMT Gandaberunda", False),
+        ("HMT Kohinoor", False),
+        ("HMT Tareeq", False),
+        ("", False),
+    ],
+)
+def test_is_kannadiga(text, expected):
+    assert is_kannadiga(text) is expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("HMT Gandaberunda", True),
+        ("HMT Women's Gandab..", True),
+        ("HMT Kannadiga Gents JGGG 01", True),
+        ("HMT Kannadiga Ladi..", True),
+        ("HMT Galaxy VG3L22", False),
+        ("HMT Kohinoor", False),
+    ],
+)
+def test_is_target_watch(text, expected):
+    assert is_target_watch(text) is expected
+
+
 def test_clean_product_name():
     assert clean_product_name("  HMT   Women&#039;s Gandaberunda   ") == "HMT Women's Gandaberunda"
     assert clean_product_name("&quot;Gandaberunda&quot;") == '"Gandaberunda"'
@@ -54,6 +98,9 @@ def test_extract_model_ref():
     assert extract_model_ref("HMT Women's Gandaberunda JLGG - 01 White") == "JLGG 01"
     assert extract_model_ref("HMT Men's Gandaberunda JLGL 01") == "JLGL 01"
     assert extract_model_ref("HMT Gandaberunda JLSS 01 Yellow") == "JLSS 01"
+    assert extract_model_ref("HMT Kannadiga Gents JGGG 01") == "JGGG 01"
+    assert extract_model_ref("HMT Kannadiga Ladies JLSL 01") == "JLSL 01"
+    assert extract_model_ref("HMT Kannadiga Gents JGSS 01") == "JGSS 01"
     assert extract_model_ref("HMT Watch Without Model Code") is None
 
 
@@ -66,4 +113,3 @@ def test_normalize_url():
     in_url = "https://www.hmtwatches.in/product_overview?id=abc123token"
     assert normalize_url(in_url) == in_url
     assert normalize_url("http://hmtwatches.in/product_overview?id=abc123token/") == in_url
-

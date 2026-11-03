@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -39,6 +40,8 @@ from hmt_sentinel.matching import (
     clean_product_name,
     extract_model_ref,
     is_gandaberunda,
+    is_kannadiga,
+    is_target_watch,
     normalize_url,
 )
 from hmt_sentinel.models import AvailabilityState, Product, utcnow
@@ -47,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.hmtwatches.in"
 COLLECTION_API = f"{BASE_URL}/filter_products_collections"
+SEARCH_API = f"{BASE_URL}/search_products"
 GANDABERUNDA_COLLECTION_ID = 64
 
 _CSRF_HEADERS = {
@@ -73,14 +77,16 @@ class HMTInAdapter(BaseAdapter):
     domain = "hmtwatches.in"
 
     def discover(self) -> list[Product]:
-        """Discover all Gandaberunda products via the collection filter API."""
-        logger.info("[hmtwatches.in] Starting discovery (collection_id=%d)", GANDABERUNDA_COLLECTION_ID)
+        """Discover all Gandaberunda and Kannadiga products via collection filter and search."""
+        logger.info("[hmtwatches.in] Starting discovery (collection_id=%d and search)", GANDABERUNDA_COLLECTION_ID)
         self.last_error = None
         all_products: list[Product] = []
         seen_ids: set[str] = set()
+        seen_names: set[str] = set()
 
+        # Step 1: Collection filter API (e.g. Collection 64 includes Heritage/Gandaberunda/Kannadiga)
         page = 1
-        max_pages = 20  # Safeguard against infinite pagination loops
+        max_pages = 5  # Sufficient to cover all pages of collection 64
         empty_pages = 0
 
         while page <= max_pages:
@@ -94,30 +100,66 @@ class HMTInAdapter(BaseAdapter):
             if not html.strip():
                 break
 
-            products = self._parse_listing_html(html)
-            if not products:
+            soup = BeautifulSoup(html, "lxml")
+            raw_cards = len(soup.select(".bc_p_item"))
+            if raw_cards == 0:
                 empty_pages += 1
                 if empty_pages >= 2:
                     break
                 page += 1
                 continue
 
+            products = self._parse_listing_html(html)
+
             new_count = 0
             for p in products:
-                if p.product_id not in seen_ids:
-                    seen_ids.add(p.product_id)
-                    all_products.append(p)
-                    new_count += 1
+                norm_name = p.name.strip().lower()
+                if p.product_id in seen_ids or (not norm_name.endswith("..") and norm_name in seen_names):
+                    continue
+                seen_ids.add(p.product_id)
+                if not norm_name.endswith(".."):
+                    seen_names.add(norm_name)
+                all_products.append(p)
+                new_count += 1
 
-            logger.info("[hmtwatches.in] Page %d: found %d products (%d new Gandaberunda)", page, len(products), new_count)
+            logger.info("[hmtwatches.in] Collection page %d: found %d target products (%d new) out of %d total", page, len(products), new_count, raw_cards)
 
-            # If fewer than 12 cards returned, that was the last page
-            if len(products) < 12:
+            # If fewer than 12 raw cards returned, that was the last page of the collection
+            if raw_cards < 12:
                 break
             page += 1
+            time.sleep(0.5)
+
+        # Step 2: Search queries as fallback or supplement if few products discovered
+        if len(all_products) < 14:
+            for query in ("kannadiga", "gandaberunda"):
+                time.sleep(1.0)
+                search_html = self._fetch_search(query)
+                if search_html:
+                    search_prods = self._parse_listing_html(search_html)
+                    added = 0
+                    for p in search_prods:
+                        norm_name = p.name.strip().lower()
+                        if p.product_id in seen_ids or (not norm_name.endswith("..") and norm_name in seen_names):
+                            continue
+                        seen_ids.add(p.product_id)
+                        if not norm_name.endswith(".."):
+                            seen_names.add(norm_name)
+                        all_products.append(p)
+                        added += 1
+                    if added > 0:
+                        logger.info("[hmtwatches.in] Search '%s': added %d additional products", query, added)
 
         logger.info("[hmtwatches.in] Discovery complete: %d products total", len(all_products))
         return all_products
+
+    def _fetch_search(self, query: str) -> Optional[str]:
+        """Fetch search results page for a query string."""
+        url = f"{SEARCH_API}?keys={query}"
+        resp = fetch(url)
+        if resp and resp.status_code == 200:
+            return resp.text
+        return None
 
     def _post_collection(self, page: int) -> Optional[str]:
         """Call the filter_products_collections endpoint."""
@@ -152,7 +194,7 @@ class HMTInAdapter(BaseAdapter):
             img_link = item.select_one("a.bc_p_img")
 
             raw_url = None
-            if name_tag and name_tag.get("href"):
+            if name_tag and name_tag.get("href") and name_tag.get("href") != "#":
                 raw_url = name_tag["href"]
             elif img_link and img_link.get("href"):
                 raw_url = img_link["href"]
@@ -162,10 +204,10 @@ class HMTInAdapter(BaseAdapter):
 
             url = normalize_url(raw_url)
             span = name_tag.select_one("span") if name_tag else None
-            name = clean_product_name(span.get_text(strip=True) if span else "")
+            name = clean_product_name(span.get_text(strip=True) if span else (name_tag.get_text(strip=True) if name_tag else ""))
 
-            # Filter: only Gandaberunda variants
-            if not is_gandaberunda(name):
+            # Filter: only target watch variants (Gandaberunda or Kannadiga)
+            if not is_target_watch(name):
                 continue
 
             # Price
@@ -216,7 +258,7 @@ class HMTInAdapter(BaseAdapter):
         title_el = soup.select_one("h3.product-title, h1.product-title, .product_name")
         if title_el:
             full_name = clean_product_name(title_el.get_text(strip=True))
-            if is_gandaberunda(full_name) and not full_name.endswith(".."):
+            if is_target_watch(full_name) and not full_name.endswith(".."):
                 product.name = full_name
                 product.model_ref = extract_model_ref(full_name)
 
